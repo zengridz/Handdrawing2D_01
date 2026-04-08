@@ -1,0 +1,7 @@
+{
+  "name": "Celestial Hand Painter 2d",
+  "description": "Space using your hand motion and camera tracking. Create glowing light trails in a dark void.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

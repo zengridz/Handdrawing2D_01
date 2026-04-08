@@ -29,7 +29,7 @@ const COLORS = [
 
 const GESTURE_DELAY = 1500; // 1.5 seconds
 const SESSION_DURATION = 60; // 60 seconds
-const FINAL_VIEW_DURATION = 20; // 20 seconds
+const FINAL_VIEW_DURATION = 20; // 20 seconds total (10s cuts + 10s frame)
 
 // --- Components ---
 
@@ -60,17 +60,47 @@ const PaintingFrame = ({ children }: { children: React.ReactNode }) => {
 
 const CinematicReveal = ({ particles, onComplete }: { particles: Particle[], onComplete: () => void }) => {
   const [phase, setPhase] = useState(0); // 0, 1, 2 for cut shots, 3 for full reveal
+  const [focusPoints, setFocusPoints] = useState<{x: string, y: string}[]>([]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const finalCanvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
+    // Calculate focus points based on particle density
+    if (particles.length > 0) {
+      const points = [];
+      // Simple density check: split canvas into 3x3 grid
+      const grid: { [key: string]: number } = {};
+      particles.forEach(p => {
+        const gx = Math.floor((p.x / window.innerWidth) * 3);
+        const gy = Math.floor((p.y / window.innerHeight) * 3);
+        const key = `${gx},${gy}`;
+        grid[key] = (grid[key] || 0) + 1;
+      });
+
+      const sortedGrid = Object.entries(grid).sort((a, b) => b[1] - a[1]);
+      for (let i = 0; i < 3; i++) {
+        if (sortedGrid[i]) {
+          const [gx, gy] = sortedGrid[i][0].split(',').map(Number);
+          points.push({
+            x: `${(gx * 33 + 16) - 50}%`,
+            y: `${(gy * 33 + 16) - 50}%`
+          });
+        } else {
+          points.push({ x: '0%', y: '0%' });
+        }
+      }
+      setFocusPoints(points);
+    } else {
+      setFocusPoints([{x: '0%', y: '0%'}, {x: '0%', y: '0%'}, {x: '0%', y: '0%'}]);
+    }
+
     const timers = [
-      setTimeout(() => setPhase(1), 4000),
-      setTimeout(() => setPhase(2), 8000),
-      setTimeout(() => setPhase(3), 12000),
+      setTimeout(() => setPhase(1), 3000),
+      setTimeout(() => setPhase(2), 6000),
+      setTimeout(() => setPhase(3), 10000),
     ];
     return () => timers.forEach(clearTimeout);
-  }, []);
+  }, [particles]);
 
   const draw = (canvas: HTMLCanvasElement | null) => {
     if (!canvas) return;
@@ -90,13 +120,18 @@ const CinematicReveal = ({ particles, onComplete }: { particles: Particle[], onC
       ctx.fill();
     }
 
+    const time = Date.now() / 1000;
     particles.forEach(p => {
-      ctx.shadowBlur = 15;
+      // Breathing effect
+      const breathe = Math.sin(time * 2 + p.x) * 0.2 + 1;
+      const glow = Math.sin(time * 1.5 + p.y) * 0.3 + 0.7;
+
+      ctx.shadowBlur = 15 * breathe;
       ctx.shadowColor = p.color;
       ctx.fillStyle = p.color;
-      ctx.globalAlpha = p.opacity;
+      ctx.globalAlpha = p.opacity * glow;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, p.size * breathe, 0, Math.PI * 2);
       ctx.fill();
     });
     
@@ -119,10 +154,11 @@ const CinematicReveal = ({ particles, onComplete }: { particles: Particle[], onC
   }, [particles, phase]);
 
   const getTransform = () => {
+    if (focusPoints.length === 0) return { scale: 1, x: "0%", y: "0%" };
     switch(phase) {
-      case 0: return { scale: 2.5, x: "20%", y: "20%" };
-      case 1: return { scale: 2.5, x: "-20%", y: "-20%" };
-      case 2: return { scale: 3, x: "0%", y: "0%" };
+      case 0: return { scale: 2.5, x: focusPoints[0].x, y: focusPoints[0].y };
+      case 1: return { scale: 2.5, x: focusPoints[1].x, y: focusPoints[1].y };
+      case 2: return { scale: 3, x: focusPoints[2].x, y: focusPoints[2].y };
       case 3: return { scale: 1, x: "0%", y: "0%" };
       default: return { scale: 1, x: "0%", y: "0%" };
     }
@@ -146,7 +182,7 @@ const CinematicReveal = ({ particles, onComplete }: { particles: Particle[], onC
           >
             <motion.div
               animate={getTransform()}
-              transition={{ duration: 4, ease: "easeInOut" }}
+              transition={{ duration: 3, ease: "easeInOut" }}
               className="w-full h-full"
             >
               <canvas 
@@ -294,13 +330,18 @@ export default function App() {
       }
 
       // Draw particles
+      const time = Date.now() / 1000;
       latestState.current.particles.forEach(p => {
-        ctx.shadowBlur = 15;
+        // Breathing effect
+        const breathe = Math.sin(time * 2 + p.x) * 0.2 + 1;
+        const glow = Math.sin(time * 1.5 + p.y) * 0.3 + 0.7;
+
+        ctx.shadowBlur = 15 * breathe;
         ctx.shadowColor = p.color;
         ctx.fillStyle = p.color;
-        ctx.globalAlpha = p.opacity;
+        ctx.globalAlpha = p.opacity * glow;
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, p.size * breathe, 0, Math.PI * 2);
         ctx.fill();
       });
 
@@ -362,9 +403,28 @@ export default function App() {
 
         if (currentIsShowingFinal) return;
 
-        const landmarks = results.multiHandLandmarks[0];
+        // Determine which hand is which
+        const handData = results.multiHandLandmarks.map((lm, index) => ({
+          landmarks: lm,
+          label: results.multiHandedness[index].label // 'Left' or 'Right'
+        }));
+
+        // Left hand (or first hand if only one) for drawing/gestures
+        // Right hand for erasing
+        const leftHand = handData.find(h => h.label === 'Left') || handData[0];
+        const rightHand = handData.find(h => h.label === 'Right');
+
+        const landmarks = leftHand.landmarks;
         const fingerCount = countFingers(landmarks);
         setDetectedFingers(fingerCount);
+
+        // Erase logic with Right Hand (Open Palm)
+        if (rightHand && rightHand !== leftHand) {
+          const rightFingerCount = countFingers(rightHand.landmarks);
+          if (rightFingerCount >= 4) {
+            setParticles([]);
+          }
+        }
 
         // Gesture Timer Logic for Color Selection
         if (fingerCount > 0 && fingerCount <= 3) {
@@ -573,17 +633,7 @@ export default function App() {
       {/* UI Controls */}
       <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-6 z-30">
         <div className="flex items-center gap-4 p-2 rounded-full bg-black/40 border border-white/10 backdrop-blur-xl shadow-2xl">
-          <div className="flex items-center gap-2 pr-4 border-r border-white/10">
-            <button
-              onClick={clearCanvas}
-              className="p-3 rounded-full bg-white/5 hover:bg-white/10 transition-colors group"
-              title="Clear Canvas"
-            >
-              <Eraser className="w-5 h-5 text-white/60 group-hover:text-white" />
-            </button>
-          </div>
-          
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 px-4">
             {COLORS.map((color, index) => (
               <div key={color} className="relative">
                 <button
@@ -619,11 +669,15 @@ export default function App() {
         <div className="flex flex-col items-center gap-1 pointer-events-none opacity-40">
            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest">
               <Hand className="w-3 h-3" />
-              <span>Open Palm to Paint</span>
+              <span>Right Palm: Paint</span>
+           </div>
+           <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest">
+              <Eraser className="w-3 h-3" />
+              <span>Left Palm: Erase</span>
            </div>
            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest">
               <Sparkles className="w-3 h-3" />
-              <span>Hold 1-3 fingers to change color</span>
+              <span>Right 1-3 fingers: Color</span>
            </div>
         </div>
       </div>

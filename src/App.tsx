@@ -35,25 +35,52 @@ const FINAL_VIEW_DURATION = 20; // 20 seconds total (10s cuts + 10s frame)
 
 const PaintingFrame = ({ children }: { children: React.ReactNode }) => {
   return (
-    <div className="relative p-8 md:p-12 lg:p-16 bg-[#1a1a1a] shadow-[0_0_100px_rgba(0,0,0,0.8)] border-[12px] border-[#2a2a2a] rounded-sm">
-      {/* Inner Ornate Border */}
-      <div className="absolute inset-0 border-[4px] border-[#3a3a3a] m-1 pointer-events-none" />
-      <div className="absolute inset-0 border border-white/5 m-4 pointer-events-none" />
+    <div className="relative p-6 md:p-10 bg-[#3d2b1f] shadow-[0_0_80px_rgba(0,0,0,0.9)] border-[16px] border-[#2d1e14] rounded-sm ring-1 ring-white/10">
+      {/* Wood Texture Simulation */}
+      <div className="absolute inset-0 opacity-10 pointer-events-none bg-[repeating-linear-gradient(90deg,transparent,transparent_2px,rgba(0,0,0,0.2)_2px,rgba(0,0,0,0.2)_4px)]" />
       
-      {/* Corner Accents */}
-      <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-white/20 m-2" />
-      <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-white/20 m-2" />
-      <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-white/20 m-2" />
-      <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-white/20 m-2" />
+      {/* Minimal Inner Border */}
+      <div className="absolute inset-0 border-[2px] border-black/40 m-1 pointer-events-none" />
       
-      <div className="relative bg-black overflow-hidden aspect-[4/3] w-full max-w-[80vw] max-h-[70vh] shadow-inner">
+      <div className="relative bg-black overflow-hidden aspect-[4/3] w-full max-w-[80vw] max-h-[70vh] shadow-[inset_0_0_40px_rgba(0,0,0,1)]">
         {children}
       </div>
       
       {/* Label */}
-      <div className="absolute -bottom-12 left-1/2 -translate-x-1/2 px-4 py-1 bg-[#222] border border-white/10 text-[10px] uppercase tracking-[0.3em] text-white/60 font-bold">
-        Celestial Void № 1
+      <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 px-3 py-0.5 bg-[#2d1e14] border border-white/5 text-[9px] uppercase tracking-[0.4em] text-white/40 font-medium">
+        Celestial Void
       </div>
+    </div>
+  );
+};
+
+const Celebration = () => {
+  const particles = Array.from({ length: 40 });
+  return (
+    <div className="absolute inset-0 pointer-events-none overflow-hidden">
+      {particles.map((_, i) => (
+        <motion.div
+          key={i}
+          initial={{ 
+            x: `${Math.random() * 100}%`, 
+            y: -20,
+            opacity: 0,
+            scale: Math.random() * 0.5 + 0.5
+          }}
+          animate={{ 
+            y: window.innerHeight + 20,
+            opacity: [0, 1, 1, 0],
+            rotate: 360
+          }}
+          transition={{ 
+            duration: Math.random() * 3 + 4,
+            repeat: Infinity,
+            delay: Math.random() * 5,
+            ease: "linear"
+          }}
+          className="absolute w-1 h-1 bg-white rounded-full shadow-[0_0_10px_white]"
+        />
+      ))}
     </div>
   );
 };
@@ -216,8 +243,9 @@ const CinematicReveal = ({ particles, onComplete }: { particles: Particle[], onC
             key="final-reveal"
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="flex flex-col items-center"
+            className="flex flex-col items-center relative"
           >
+            <Celebration />
             <PaintingFrame>
               <canvas 
                 ref={finalCanvasRef} 
@@ -273,6 +301,7 @@ export default function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [particles, setParticles] = useState<Particle[]>([]);
   const [currentHandPos, setCurrentHandPos] = useState<{ x: number, y: number } | null>(null);
+  const [currentErasePos, setCurrentErasePos] = useState<{ x: number, y: number } | null>(null);
   const [currentColor, setCurrentColor] = useState(COLORS[0]);
   const [isDrawing, setIsDrawing] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
@@ -361,6 +390,31 @@ export default function App() {
         ctx.fill();
       }
 
+      // Draw Eraser Hover
+      if (currentErasePos && !isShowingFinal) {
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = 'rgba(255, 255, 255, 0.4)';
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+        ctx.lineWidth = 2;
+        ctx.globalAlpha = 0.3;
+        
+        // Outer ring
+        ctx.beginPath();
+        ctx.arc(currentErasePos.x, currentErasePos.y, 30, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Inner translucent fill to identify the "area of effect"
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.fill();
+
+        // Small center dot
+        ctx.globalAlpha = 0.8;
+        ctx.beginPath();
+        ctx.arc(currentErasePos.x, currentErasePos.y, 2, 0, Math.PI * 2);
+        ctx.fillStyle = 'white';
+        ctx.fill();
+      }
+
       ctx.shadowBlur = 0;
       ctx.globalAlpha = 1;
 
@@ -381,7 +435,7 @@ export default function App() {
     });
 
     hands.setOptions({
-      maxNumHands: 1,
+      maxNumHands: 2,
       modelComplexity: 1,
       minDetectionConfidence: 0.5,
       minTrackingConfidence: 0.5,
@@ -409,97 +463,125 @@ export default function App() {
           label: results.multiHandedness[index].label // 'Left' or 'Right'
         }));
 
-        // Left hand (or first hand if only one) for drawing/gestures
-        // Right hand for erasing
-        const leftHand = handData.find(h => h.label === 'Left') || handData[0];
+        // Find specific hands
+        const leftHand = handData.find(h => h.label === 'Left');
         const rightHand = handData.find(h => h.label === 'Right');
 
-        const landmarks = leftHand.landmarks;
-        const fingerCount = countFingers(landmarks);
-        setDetectedFingers(fingerCount);
+        // Drawing hand (Left)
+        const drawingHand = leftHand || (!rightHand ? handData[0] : null);
+        
+        if (drawingHand) {
+          const landmarks = drawingHand.landmarks;
+          const fingerCount = countFingers(landmarks);
+          setDetectedFingers(fingerCount);
 
-        // Erase logic with Right Hand (Open Palm)
-        if (rightHand && rightHand !== leftHand) {
-          const rightFingerCount = countFingers(rightHand.landmarks);
-          if (rightFingerCount >= 4) {
-            setParticles([]);
-          }
-        }
-
-        // Gesture Timer Logic for Color Selection
-        if (fingerCount > 0 && fingerCount <= 3) {
-          if (fingerCount !== lastGestureRef.current) {
-            lastGestureRef.current = fingerCount;
-            setPendingGesture(fingerCount);
-            setGestureProgress(0);
-            
-            if (gestureTimerRef.current) clearTimeout(gestureTimerRef.current);
-            
-            const startTime = Date.now();
-            const interval = setInterval(() => {
-              const elapsed = Date.now() - startTime;
-              const progress = Math.min(elapsed / GESTURE_DELAY, 1);
-              setGestureProgress(progress);
-              if (progress >= 1) clearInterval(interval);
-            }, 50);
-  
-            gestureTimerRef.current = setTimeout(() => {
-              clearInterval(interval);
-              if (fingerCount >= 1 && fingerCount <= 3) {
-                setCurrentColor(COLORS[fingerCount - 1]);
-              }
-              setPendingGesture(null);
+          // Gesture Timer Logic for Color Selection
+          if (fingerCount > 0 && fingerCount <= 3) {
+            if (fingerCount !== lastGestureRef.current) {
+              lastGestureRef.current = fingerCount;
+              setPendingGesture(fingerCount);
               setGestureProgress(0);
-            }, GESTURE_DELAY);
+              
+              if (gestureTimerRef.current) clearTimeout(gestureTimerRef.current);
+              
+              const startTime = Date.now();
+              const interval = setInterval(() => {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(elapsed / GESTURE_DELAY, 1);
+                setGestureProgress(progress);
+                if (progress >= 1) clearInterval(interval);
+              }, 50);
+    
+              gestureTimerRef.current = setTimeout(() => {
+                clearInterval(interval);
+                if (fingerCount >= 1 && fingerCount <= 3) {
+                  setCurrentColor(COLORS[fingerCount - 1]);
+                }
+                setPendingGesture(null);
+                setGestureProgress(0);
+              }, GESTURE_DELAY);
+            }
+          } else {
+            lastGestureRef.current = 0;
+            setPendingGesture(null);
+            setGestureProgress(0);
+            if (gestureTimerRef.current) clearTimeout(gestureTimerRef.current);
+          }
+
+          // 2D Mapping
+          const indexTip = landmarks[8];
+          const canvas = canvasRef.current;
+          if (canvas) {
+            // Mirror X because camera is mirrored
+            const x = (1 - indexTip.x) * canvas.width;
+            const y = indexTip.y * canvas.height;
+
+            if (fingerCount > 0) {
+              setCurrentHandPos({ x, y });
+            } else {
+              setCurrentHandPos(null);
+            }
+
+            // Open palm = at least 4 fingers extended
+            const openPalm = fingerCount >= 4;
+            setIsDrawing(openPalm);
+
+            if (openPalm) {
+              setParticles((prev) => {
+                const last = prev[prev.length - 1];
+                if (last) {
+                  const distToLast = Math.sqrt(Math.pow(x - last.x, 2) + Math.pow(y - last.y, 2));
+                  if (distToLast < 5) return prev;
+                }
+
+                const newParticle: Particle = {
+                  id: Math.random().toString(36).substr(2, 9),
+                  x,
+                  y,
+                  color: currentColorValue,
+                  size: 4 + Math.random() * 8,
+                  opacity: 0.8 + Math.random() * 0.2,
+                };
+
+                return [...prev, newParticle].slice(-2000);
+              });
+            }
           }
         } else {
-          lastGestureRef.current = 0;
+          setCurrentHandPos(null);
+          setIsDrawing(false);
+          setDetectedFingers(0);
           setPendingGesture(null);
           setGestureProgress(0);
+          lastGestureRef.current = 0;
           if (gestureTimerRef.current) clearTimeout(gestureTimerRef.current);
         }
 
-        // 2D Mapping
-        const indexTip = landmarks[8];
-        const canvas = canvasRef.current;
-        if (canvas) {
-          // Mirror X because camera is mirrored
-          const x = (1 - indexTip.x) * canvas.width;
-          const y = indexTip.y * canvas.height;
+        // Erasing hand (Right)
+        if (rightHand) {
+          const landmarks = rightHand.landmarks;
+          const rightFingerCount = countFingers(landmarks);
+          const canvas = canvasRef.current;
+          
+          if (canvas) {
+            const indexTip = landmarks[8];
+            const ex = (1 - indexTip.x) * canvas.width;
+            const ey = indexTip.y * canvas.height;
+            setCurrentErasePos({ x: ex, y: ey });
 
-          if (fingerCount > 0) {
-            setCurrentHandPos({ x, y });
-          } else {
-            setCurrentHandPos(null);
+            if (rightFingerCount >= 4) {
+              setParticles((prev) => prev.filter(p => {
+                const dist = Math.sqrt(Math.pow(p.x - ex, 2) + Math.pow(p.y - ey, 2));
+                return dist > 30; // Eraser radius
+              }));
+            }
           }
-
-          // Open palm = at least 4 fingers extended
-          const openPalm = fingerCount >= 4;
-          setIsDrawing(openPalm);
-
-          if (openPalm) {
-            setParticles((prev) => {
-              const last = prev[prev.length - 1];
-              if (last) {
-                const distToLast = Math.sqrt(Math.pow(x - last.x, 2) + Math.pow(y - last.y, 2));
-                if (distToLast < 5) return prev;
-              }
-
-              const newParticle: Particle = {
-                id: Math.random().toString(36).substr(2, 9),
-                x,
-                y,
-                color: currentColorValue,
-                size: 2 + Math.random() * 4,
-                opacity: 0.8 + Math.random() * 0.2,
-              };
-
-              return [...prev, newParticle].slice(-2000);
-            });
-          }
+        } else {
+          setCurrentErasePos(null);
         }
       } else {
         setCurrentHandPos(null);
+        setCurrentErasePos(null);
         setIsDrawing(false);
         setDetectedFingers(0);
         setPendingGesture(null);
